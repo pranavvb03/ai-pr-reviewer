@@ -1,0 +1,27 @@
+{
+  "name": "gemini-ai-pr-reviewer",
+  "version": "1.0.0",
+  "description": "Secure AI PR Reviewer Agent using Google Gemini API",
+  "type": "module",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js",
+    "review": "node index.js",
+    "test:safe": "cat data/safe.js | node index.js",
+    "test:vulnerable": "cat data/vulnerable.js | node index.js",
+    "test:diff": "cat data/pr.diff | node index.js",
+    "lint": "eslint .",
+    "validate": "node --check index.js"
+  },
+  "dependencies": {
+    "@google/generative-ai": "^0.21.0",
+    "@octokit/rest": "^21.0.2",
+    "dotenv": "^16.4.5",
+    "zod": "^3.23.8"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "keywords": ["github", "pr-review", "gemini", "ai", "security", "code-review"],
+  "license": "MIT"
+}

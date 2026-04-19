@@ -1,0 +1,73 @@
+name: Gemini AI PR Reviewer
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+# Minimal permissions — principle of least privilege
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  review:
+    name: AI Code Review
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    env:
+      GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+      GITHUB_TOKEN:   ${{ secrets.GITHUB_TOKEN }}
+      REPO:           ${{ github.repository }}
+      PR_NUMBER:      ${{ github.event.pull_request.number }}
+
+    steps:
+      # ── 1. Checkout ────────────────────────────────────────────────────────
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1  # shallow clone is enough — we only need the diff
+
+      # ── 2. Node.js setup ───────────────────────────────────────────────────
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      # ── 3. Install dependencies ────────────────────────────────────────────
+      - name: Install dependencies
+        run: npm ci --prefer-offline
+
+      # ── 4. Fetch PR diff via GitHub API ───────────────────────────────────
+      - name: Fetch PR Diff
+        run: |
+          curl -fsSL \
+            -H "Authorization: Bearer $GITHUB_TOKEN" \
+            -H "Accept: application/vnd.github.v3.diff" \
+            "https://api.github.com/repos/$REPO/pulls/$PR_NUMBER" \
+            -o pr.diff
+          echo "Diff size: $(wc -c < pr.diff) bytes"
+
+      # ── 5. Export diff into environment (multiline-safe) ──────────────────
+      - name: Export Diff to Environment
+        run: |
+          {
+            echo "PR_DIFF<<DIFF_EOF"
+            cat pr.diff
+            echo "DIFF_EOF"
+          } >> "$GITHUB_ENV"
+
+      # ── 6. Run the Gemini reviewer ─────────────────────────────────────────
+      - name: Run Gemini PR Reviewer
+        id: reviewer
+        run: node index.js
+
+      # ── 7. Upload diff as artifact for debugging ───────────────────────────
+      - name: Upload diff artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pr-diff-${{ github.event.pull_request.number }}
+          path: pr.diff
+          retention-days: 7
