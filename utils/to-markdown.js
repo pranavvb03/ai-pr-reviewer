@@ -27,17 +27,17 @@ export function toMarkdown(review) {
   const { verdict, summary, risk_score, findings = [], suggestions = [], stats } = review;
 
   const verdictEmoji = VERDICT_EMOJI[verdict] ?? "❓";
-  const riskBar = buildRiskBar(risk_score ?? 0);
+  const riskStatus = getRiskStatusEmoji(risk_score ?? 0);
 
   let md = "";
 
   // ── Header ──────────────────────────────────────────────────────────────────
   md += `## ${verdictEmoji} AI PR Review — \`${verdict.toUpperCase()}\`\n\n`;
-  md += `> Powered by Google Gemini · [Secure AI PR Reviewer](https://github.com/logicbaselabs/secure-ai-pr-reviewer)\n\n`;
+  md += `> Powered by Google Gemini \n\n`;
 
   // ── Risk score ───────────────────────────────────────────────────────────────
   if (risk_score !== undefined) {
-    md += `**Risk Score:** ${risk_score}/100  ${riskBar}\n\n`;
+    md += `**Risk Score:** ${risk_score}/100 ${riskStatus}\n\n`;
   }
 
   // ── Summary ──────────────────────────────────────────────────────────────────
@@ -60,7 +60,6 @@ export function toMarkdown(review) {
   if (findings.length === 0) {
     md += `### ✅ No issues found\n\nThis diff looks clean. No security, correctness, or quality issues were detected.\n\n`;
   } else {
-    // Sort by severity: critical → high → medium → low → none
     const severityOrder = { critical: 0, high: 1, medium: 2, low: 3, none: 4 };
     const sorted = [...findings].sort(
       (a, b) => (severityOrder[a.severity] ?? 5) - (severityOrder[b.severity] ?? 5)
@@ -92,7 +91,6 @@ export function toMarkdown(review) {
     }
   }
 
-  // ── General suggestions ──────────────────────────────────────────────────────
   if (suggestions && suggestions.length > 0) {
     md += `### 💡 General Suggestions\n\n`;
     for (const s of suggestions) {
@@ -101,7 +99,6 @@ export function toMarkdown(review) {
     md += `\n`;
   }
 
-  // ── Footer ────────────────────────────────────────────────────────────────────
   md += `---\n`;
   md += `*This review was generated automatically. A human reviewer should make the final merge decision.*\n`;
 
@@ -109,14 +106,13 @@ export function toMarkdown(review) {
 }
 
 /**
- * Builds a simple text-based risk bar.
+ * Returns only the color emoji associated with the risk score.
  * @param {number} score - 0–100
  * @returns {string}
  */
-function buildRiskBar(score) {
-  const filled = Math.round(score / 10);
-  const empty = 10 - filled;
-  const bar = "█".repeat(filled) + "░".repeat(empty);
-  const color = score >= 80 ? "🔴" : score >= 50 ? "🟠" : score >= 20 ? "🟡" : "🟢";
-  return `${color} \`${bar}\``;
+function getRiskStatusEmoji(score) {
+  if (score >= 80) return "🔴";
+  if (score >= 50) return "🟠";
+  if (score >= 20) return "🟡";
+  return "🟢";
 }
