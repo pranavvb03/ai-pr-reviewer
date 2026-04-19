@@ -62,9 +62,9 @@ export async function reviewCode(diffText, jsonSchema) {
     systemInstruction: SYSTEM_PROMPT,
     safetySettings,
     generationConfig: {
-      temperature: 0.1,         // Low temperature = more deterministic, better for structured output
+      temperature: 0.1,          // Low temperature = more deterministic, better for structured output
       topP: 0.9,
-      maxOutputTokens: 2048,
+      maxOutputTokens: 8192,    
       responseMimeType: "application/json", // Gemini 1.5+ native JSON mode
     },
   });
@@ -79,20 +79,48 @@ DIFF TO REVIEW:
 ${diffText}
 \`\`\``;
 
-  const result = await model.generateContent(prompt);
+  let result;
+  try {
+    result = await model.generateContent(prompt);
+  } catch (err) {
+    // Re-throw with a cleaner message for common SDK errors
+    const msg = err.message ?? "";
+    if (msg.includes("API_KEY_INVALID") || msg.includes("401")) {
+      throw new Error("Gemini API key is invalid or expired. Check your GEMINI_API_KEY secret.");
+    }
+    if (msg.includes("QUOTA_EXCEEDED") || msg.includes("429")) {
+      throw new Error("Gemini API quota exceeded (429). The request will be retried.");
+    }
+    if (msg.includes("503") || msg.includes("UNAVAILABLE")) {
+      throw new Error("Gemini API is temporarily unavailable (503). The request will be retried.");
+    }
+    throw err;
+  }
+
   const response = result.response;
 
   // Surface safety block reasons clearly
   if (response.promptFeedback?.blockReason) {
     throw new Error(
-      `Gemini blocked the request. Reason: ${response.promptFeedback.blockReason}`
+      `Gemini blocked the request. Reason: ${response.promptFeedback.blockReason}. ` +
+      `Consider adjusting safety settings or reviewing the diff content.`
     );
+  }
+
+  // Check finish reason — STOP is the only healthy finish for our use case
+  const candidate = response.candidates?.[0];
+  if (candidate?.finishReason && candidate.finishReason !== "STOP") {
+    console.warn(`⚠️  Gemini finished with reason: ${candidate.finishReason}. Output may be incomplete.`);
   }
 
   const text = response.text();
 
   if (!text || text.trim() === "") {
-    throw new Error("Gemini returned an empty response.");
+    throw new Error(
+      "Gemini returned an empty response. " +
+      `Finish reason: ${candidate?.finishReason ?? "unknown"}. ` +
+      "Try a smaller diff or a different model."
+    );
   }
 
   return text;
